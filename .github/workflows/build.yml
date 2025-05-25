@@ -4,7 +4,7 @@ name: Build and Package FocusTimer
 on:
   push:
     branches:
-      - main      # main 브랜치에 푸시될 때마다 실행
+      - main
 
 jobs:
   build:
@@ -17,16 +17,16 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
       - name: Build fat JAR
         run: |
-          ./gradlew clean jar  # 또는 fatJar 태스크 이름이 다르면 해당 태스크로 변경
+          ./gradlew clean jar
         shell: bash
 
       - name: Upload JAR artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3    # ← v3 으로 변경
         with:
           name: FocusTimer-jar
           path: build/libs/*.jar
