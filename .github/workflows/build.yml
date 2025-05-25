@@ -1,53 +1,44 @@
 name: Build and Package FocusTimer
 
- on:
--  push:
--    tags:
--      - 'v*.*.*'
-+  push:
-+    branches:
-+      - main
-
+on:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: windows-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - name: Set up Java 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 17
 
-    - name: Build fat JAR
-      run: .\gradlew.bat clean fatJar
+      - name: Build fat JAR
+        run: .\gradlew.bat clean shadowJar
 
-    - name: Create custom runtime image via jlink
-      run: |
-        jlink ^
-          --module-path "%JAVA_HOME%\jmods;C:\javafx-sdk-17.0.15\lib" ^
-          --add-modules java.base,java.desktop,javafx.controls ^
-          --output custom-runtime
+      - name: Package EXE with jpackage
+        run: |
+          jpackage ^
+            --type exe ^
+            --name FocusTimer ^
+            --app-version 1.0 ^
+            --input build\libs ^
+            --main-jar FocusTimer-all-1.0.jar ^
+            --main-class TimerApp ^
+            --win-shortcut ^
+            --win-menu ^
+            --module-path "C:\javafx-sdk-17.0.15\lib" ^
+            --add-modules javafx.controls
 
-    - name: Package EXE with jpackage
-      run: |
-        jpackage ^
-          --type exe ^
-          --name FocusTimer ^
-          --app-version ${{ github.ref_name }} ^
-          --input build\libs ^
-          --main-jar FocusTimer-all.jar ^
-          --main-class TimerApp ^
-          --win-shortcut ^
-          --win-menu ^
-          --runtime-image custom-runtime
-
-    - name: Upload installer artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: FocusTimer-Installer
-        path: '*.exe'
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: FocusTimer-windows
+          path: |
+            FocusTimer.exe
