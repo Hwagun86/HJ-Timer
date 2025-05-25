@@ -37,8 +37,7 @@ jobs:
             --add-modules javafx.controls
 
       - name: Upload EXE artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v2
         with:
           name: FocusTimer-windows
-          path: |
-            FocusTimer.exe
+          path: FocusTimer.exe
