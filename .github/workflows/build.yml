@@ -1,9 +1,13 @@
 name: Build and Package FocusTimer
 
-on:
-  push:
-    tags:
-      - 'v*.*.*'    # v1.0.0 형태로 태그를 푸시할 때만 실행
+ on:
+-  push:
+-    tags:
+-      - 'v*.*.*'
++  push:
++    branches:
++      - main
+
 
 jobs:
   build:
