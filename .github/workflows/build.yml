@@ -1,6 +1,7 @@
+# .github/workflows/build.yml
 name: Build and Package FocusTimer
 
-# main 브랜치에 push 될 때마다 실행
+# main 브랜치에 Push 될 때마다 실행
 on:
   push:
     branches:
@@ -11,23 +12,28 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: 체크아웃 코드
+      # 1) 소스 체크아웃
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Java
+      # 2) JDK 17 설치
+      - name: Set up Java 17
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 빌드 (Gradle)
+      # 3) Gradle 빌드
+      - name: Build with Gradle
         run: |
           ./gradlew clean build
 
+      # 4) fat JAR 생성 (build/libs/FocusTimer-all-1.0.jar)
       - name: Create fat JAR
         run: |
           ./gradlew jar
 
+      # 5) jpackage로 EXE 패키징
       - name: Package EXE with jpackage
         run: |
           jpackage `
@@ -41,7 +47,8 @@ jobs:
             --win-menu `
             --dest installer-output
 
-      - name: 업로드 산출물
+      # 6) 생성된 installer-output 폴더를 Artifact로 업로드
+      - name: Upload installer
         uses: actions/upload-artifact@v3
         with:
           name: FocusTimer-installer
