@@ -11,22 +11,26 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      # 1) 저장소 체크아웃
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      # 2) JDK 17 셋업
       - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
           distribution: temurin
           java-version: '17'
 
+      # 3) Gradle 빌드 (fat JAR 생성)
       - name: Build fat JAR
         run: |
-          ./gradlew clean jar
+          ./gradlew clean shadowJar
         shell: bash
 
+      # 4) 생성된 JAR 파일을 아티팩트로 올리기
       - name: Upload JAR artifact
-        uses: actions/upload-artifact@v3    # ← v3 으로 변경
+        uses: actions/upload-artifact@v3
         with:
-          name: FocusTimer-jar
+          name: FocusTimer-JAR
           path: build/libs/*.jar
