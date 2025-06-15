@@ -52,6 +52,7 @@ tasks.withType<JavaCompile> {
 // ShadowJar 설정: 모든 의존성 포함한 fat-jar 생성
 tasks.named<ShadowJar>("shadowJar") {
     archiveBaseName.set("FocusTimer-all")  // 결과물 이름: FocusTimer-all.jar
+    archiveVersion.set("")                 // 버전 번호 제거
     archiveClassifier.set("")              // 분류자 제거
     mergeServiceFiles()                    // JNA 서비스 파일 병합
 
