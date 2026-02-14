@@ -37,6 +37,7 @@ import com.sun.jna.platform.win32.WinDef.HWND;
 import com.sun.jna.platform.win32.WinNT.HANDLE;
 
 public class TimerApp extends Application {
+    private static final boolean IS_WINDOWS = System.getProperty("os.name", "").toLowerCase().contains("win");
     // ── 친숙명 매핑 테이블 (150개) ──
     private static final Map<String,String> FRIENDLY_NAMES;
     static {
@@ -378,7 +379,15 @@ public class TimerApp extends Application {
 
     private void registerProcess() {
         List<String> running = getRunningProcesses();
-        ObservableList<String> options = FXCollections.observableArrayList(running);
+        String activeExe = getForegroundProcessName();
+
+        SortedSet<String> merged = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        merged.addAll(running);
+        merged.addAll(FRIENDLY_NAMES.keySet());
+        if (!activeExe.isBlank()) merged.add(activeExe);
+
+        ObservableList<String> allOptions = FXCollections.observableArrayList(merged);
+        ObservableList<String> filteredOptions = FXCollections.observableArrayList(allOptions);
 
         Dialog<String> dialog = new Dialog<>();
         dialog.initOwner(primaryStage);
@@ -391,8 +400,8 @@ public class TimerApp extends Application {
         TextField tfSearch = new TextField();
         tfSearch.setPromptText("앱 이름 검색 (예: chrome, vscode, excel)");
 
-        ListView<String> listView = new ListView<>(options);
-        listView.setPrefHeight(260);
+        ListView<String> listView = new ListView<>(filteredOptions);
+        listView.setPrefHeight(280);
         listView.setCellFactory(v -> new ListCell<>() {
             @Override
             protected void updateItem(String exe, boolean empty) {
@@ -405,36 +414,82 @@ public class TimerApp extends Application {
             }
         });
 
-        String activeExe = getForegroundProcessName();
         Button btnActive = new Button("현재 활성 앱 선택: " + (activeExe.isEmpty() ? "감지 실패" : activeExe));
         styleSecondaryButton(btnActive);
         btnActive.setOnAction(e -> {
             String exe = getForegroundProcessName();
-            if (!exe.isEmpty()) {
-                if (!options.contains(exe)) {
-                    options.add(0, exe);
-                }
+            if (!exe.isBlank()) {
+                if (!allOptions.contains(exe)) allOptions.add(0, exe);
+                applyFilter(tfSearch.getText(), allOptions, filteredOptions);
                 listView.getSelectionModel().select(exe);
                 listView.scrollTo(exe);
             }
         });
 
-        tfSearch.textProperty().addListener((obs, oldV, newV) -> {
-            String q = newV == null ? "" : newV.trim().toLowerCase();
-            options.setAll(running.stream()
-                    .filter(exe -> exe.toLowerCase().contains(q)
-                            || FRIENDLY_NAMES.getOrDefault(exe.toLowerCase(), exe).toLowerCase().contains(q))
-                    .collect(Collectors.toList()));
+        if (!activeExe.isBlank()) {
+            listView.getSelectionModel().select(activeExe);
+            listView.scrollTo(activeExe);
+        }
+
+        tfSearch.textProperty().addListener((obs, oldV, newV) ->
+                applyFilter(newV, allOptions, filteredOptions)
+        );
+
+        TextField tfManual = new TextField();
+        tfManual.setPromptText("직접 입력 (예: customapp.exe)");
+
+        Button btnManual = new Button("직접 입력 등록");
+        styleSecondaryButton(btnManual);
+        btnManual.setOnAction(e -> {
+            String manualExe = normalizeExeName(tfManual.getText());
+            if (!manualExe.isBlank()) {
+                dialog.setResult(manualExe);
+                dialog.close();
+            }
         });
 
-        VBox content = new VBox(10, btnActive, tfSearch, listView);
+        Label sourceHint = new Label(running.isEmpty()
+                ? "실행중 앱 목록을 가져오지 못해 추천 앱 목록을 표시합니다."
+                : "실행중 앱 + 추천 앱 목록에서 선택할 수 있습니다.");
+        sourceHint.setStyle("-fx-font-size:11px;-fx-text-fill:#9A9AA2;");
+
+        listView.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2) {
+                String selected = listView.getSelectionModel().getSelectedItem();
+                if (selected != null) {
+                    dialog.setResult(selected);
+                    dialog.close();
+                }
+            }
+        });
+
+        HBox manualBox = new HBox(8, tfManual, btnManual);
+        VBox content = new VBox(10, btnActive, tfSearch, listView, sourceHint, manualBox);
         content.setPadding(new Insets(8));
         dialog.getDialogPane().setContent(content);
 
         dialog.setResultConverter(bt -> bt == addType ? listView.getSelectionModel().getSelectedItem() : null);
 
         Optional<String> selected = dialog.showAndWait();
-        selected.ifPresent(this::addProcessByExe);
+        selected.map(this::normalizeExeName).ifPresent(this::addProcessByExe);
+    }
+
+    private void applyFilter(String query, List<String> source, ObservableList<String> target) {
+        String q = query == null ? "" : query.trim().toLowerCase();
+        target.setAll(source.stream()
+                .filter(exe -> exe.toLowerCase().contains(q)
+                        || FRIENDLY_NAMES.getOrDefault(exe.toLowerCase(), exe).toLowerCase().contains(q))
+                .collect(Collectors.toList()));
+    }
+
+    private String normalizeExeName(String exe) {
+        if (exe == null) return "";
+        String normalized = exe.trim();
+        if (normalized.isEmpty()) return "";
+        if (!normalized.toLowerCase().endsWith(".exe")) {
+            normalized += ".exe";
+        }
+        return normalized;
     }
 
     private void addProcessByExe(String exe) {
@@ -450,6 +505,7 @@ public class TimerApp extends Application {
     }
 
     private List<String> getRunningProcesses() {
+        if (!IS_WINDOWS) return new ArrayList<>();
         try {
             Process pRun = new ProcessBuilder("tasklist", "/FO", "CSV", "/NH").start();
             try (BufferedReader br = new BufferedReader(new InputStreamReader(pRun.getInputStream()))) {
