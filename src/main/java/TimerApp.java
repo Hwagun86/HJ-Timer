@@ -359,31 +359,56 @@ public class TimerApp extends Application {
     }
 
     private void registerProcess() {
-        showAlert("등록", "등록할 창을 활성화한 뒤 확인하세요.");
-        new Thread(() -> {
+        showAlert("등록", "확인을 누른 뒤 10초 안에 등록할 창을 활성화하세요.");
+
+        Thread captureThread = new Thread(() -> {
             try {
-                String fx = primaryStage.getTitle(), win;
-                HWND hwnd;
-                do {
-                    hwnd = User32.INSTANCE.GetForegroundWindow();
-                    char[] b = new char[512];
-                    User32.INSTANCE.GetWindowText(hwnd, b, 512);
-                    win = Native.toString(b);
+                String appTitle = primaryStage.getTitle();
+                HWND targetHwnd = null;
+                long deadline = System.currentTimeMillis() + 10_000;
+
+                while (System.currentTimeMillis() < deadline) {
+                    HWND hwnd = User32.INSTANCE.GetForegroundWindow();
+                    char[] titleBuf = new char[512];
+                    User32.INSTANCE.GetWindowText(hwnd, titleBuf, titleBuf.length);
+                    String title = Native.toString(titleBuf);
+
+                    if (!title.isEmpty() && !title.contains(appTitle)) {
+                        targetHwnd = hwnd;
+                        break;
+                    }
                     Thread.sleep(200);
-                } while (win.contains(fx) || win.isEmpty());
+                }
+
+                if (targetHwnd == null) {
+                    Platform.runLater(() -> showAlert("실패", "창 활성화를 감지하지 못했습니다. 다시 시도하세요."));
+                    return;
+                }
 
                 IntByReference pidRef = new IntByReference();
-                User32.INSTANCE.GetWindowThreadProcessId(hwnd, pidRef);
-                HANDLE pr = Kernel32.INSTANCE.OpenProcess(
+                User32.INSTANCE.GetWindowThreadProcessId(targetHwnd, pidRef);
+                HANDLE processHandle = Kernel32.INSTANCE.OpenProcess(
                         Kernel32.PROCESS_QUERY_INFORMATION | Kernel32.PROCESS_VM_READ,
                         false, pidRef.getValue()
                 );
-                char[] buf = new char[512];
-                IntByReference l = new IntByReference(buf.length);
-                Kernel32.INSTANCE.QueryFullProcessImageName(pr, 0, buf, l);
-                Kernel32.INSTANCE.CloseHandle(pr);
-                String full = new String(buf, 0, l.getValue());
-                String exe = full.substring(full.lastIndexOf('\\') + 1);
+
+                if (processHandle == null) {
+                    Platform.runLater(() -> showAlert("실패", "프로세스 정보를 읽을 수 없습니다."));
+                    return;
+                }
+
+                char[] pathBuf = new char[512];
+                IntByReference pathLen = new IntByReference(pathBuf.length);
+                boolean resolved = Kernel32.INSTANCE.QueryFullProcessImageName(processHandle, 0, pathBuf, pathLen);
+                Kernel32.INSTANCE.CloseHandle(processHandle);
+
+                if (!resolved || pathLen.getValue() <= 0) {
+                    Platform.runLater(() -> showAlert("실패", "실행 파일 경로를 읽지 못했습니다."));
+                    return;
+                }
+
+                String fullPath = new String(pathBuf, 0, pathLen.getValue());
+                String exe = fullPath.substring(fullPath.lastIndexOf('\\') + 1);
 
                 Platform.runLater(() -> {
                     if (processes.size() >= 6) {
@@ -395,8 +420,12 @@ public class TimerApp extends Application {
                         saveProcesses();
                     }
                 });
-            } catch (Exception ignored) {}
-        }).start();
+            } catch (Exception e) {
+                Platform.runLater(() -> showAlert("실패", "등록 중 오류가 발생했습니다: " + e.getMessage()));
+            }
+        });
+        captureThread.setDaemon(true);
+        captureThread.start();
     }
 
     private void showStatsWindow() {
