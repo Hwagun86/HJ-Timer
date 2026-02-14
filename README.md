@@ -1,39 +1,38 @@
- (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
-diff --git a//dev/null b/README.md
-index 0000000000000000000000000000000000000000..77fb40ee3f33306399076dd945862ee1e28a1165 100644
---- a//dev/null
-+++ b/README.md
-@@ -0,0 +1,30 @@
-+# FocusTimer
-+
-+This repository contains the FocusTimer application built with JavaFX.
-+
-+## Building
-+
-+To build the fat JAR, run:
-+
-+```bash
-+chmod +x gradlew
-+./gradlew shadowJar
-+```
-+
-+The resulting `build/libs/FocusTimer-all.jar` can be packaged with `jpackage`.
-+
-+## GitHub integration
-+
-+To push your changes, first create a GitHub repository and add it as a remote:
-+
-+```bash
-+git remote add origin https://github.com/USER/REPO.git
-+```
-+
-+Then push the current branch:
-+
-+```bash
-+git push -u origin work
-+```
-+
-+Replace `USER/REPO` with your repository path.
- 
-EOF
-)
+# FocusTimer
+
+Windows에서 동작하는 JavaFX 기반 집중 타이머 앱입니다.
+
+## 실행 파일
+
+이 저장소에는 이미 빌드된 Windows 실행 파일이 포함되어 있습니다.
+
+- `installer-output/FocusTimer/FocusTimer.exe`
+
+## 로컬 빌드
+
+### Fat JAR 생성
+
+```bash
+chmod +x gradlew
+./gradlew shadowJar
+```
+
+생성 결과물:
+
+- `build/libs/FocusTimer-all.jar`
+
+### Windows EXE 패키징
+
+Windows 환경에서 JDK 17+와 `jpackage`가 준비되어 있다면:
+
+```powershell
+./gradlew shadowJar
+jpackage --type app-image `
+  --name FocusTimer `
+  --input build/libs `
+  --main-jar FocusTimer-all.jar `
+  --main-class TimerApp `
+  --icon installer-output/FocusTimer/FocusTimer.ico
+```
+
+생성된 앱 이미지 내부의 `.exe`를 실행하면 됩니다.
