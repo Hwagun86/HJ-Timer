@@ -38,7 +38,8 @@ jobs:
             --add-modules javafx.controls
 
       - name: installer 업로드
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: FocusTimer-installer
           path: installer-output/FocusTimer
+
