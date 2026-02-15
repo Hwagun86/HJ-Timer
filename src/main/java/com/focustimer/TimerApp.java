@@ -1,3 +1,5 @@
+package com.focustimer;
+
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.stage.Stage;
