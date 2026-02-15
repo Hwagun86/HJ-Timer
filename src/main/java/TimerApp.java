@@ -21,6 +21,8 @@ import com.google.gson.reflect.TypeToken;
 
 import java.io.*;
 import java.lang.reflect.Type;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -28,7 +30,6 @@ import java.awt.SystemTray;
 import java.awt.TrayIcon;
 import java.awt.Toolkit;
 
-import com.sun.jna.Native;
 import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.platform.win32.User32;
 import com.sun.jna.platform.win32.Kernel32;
@@ -36,6 +37,7 @@ import com.sun.jna.platform.win32.WinDef.HWND;
 import com.sun.jna.platform.win32.WinNT.HANDLE;
 
 public class TimerApp extends Application {
+    private static final boolean IS_WINDOWS = System.getProperty("os.name", "").toLowerCase().contains("win");
     // ── 친숙명 매핑 테이블 (150개) ──
     private static final Map<String,String> FRIENDLY_NAMES;
     static {
@@ -217,21 +219,30 @@ public class TimerApp extends Application {
         primaryStage = stage;
         loadProcesses();
 
-        // 상단: 글로벌 타이머
-        lblGlobal = new Label("00:00:00");
-        lblGlobal.setTextFill(Color.CYAN);
-        lblGlobal.setStyle("-fx-font-size:28px;");
+        // 상단: 글로벌 타이머 (macOS 스타일 참고)
+        Label lblTitle = new Label("Focus Timer");
+        lblTitle.setStyle("-fx-font-size:14px;-fx-font-weight:700;-fx-text-fill:#F5F5F7;");
+
+        lblGlobal = new Label(format(globalSec));
+        lblGlobal.setStyle("-fx-font-size:36px;-fx-font-weight:700;-fx-text-fill:#FFFFFF;");
+
         Button btnStart = new Button("▶ 시작");
         Button btnPause = new Button("⏸ 일시정지");
         Button btnReset = new Button("⟳ 리셋");
-        HBox top = new HBox(5, lblGlobal, btnStart, btnPause, btnReset);
-        top.setAlignment(Pos.CENTER);
-        top.setPadding(new Insets(4));
+        stylePrimaryButton(btnStart);
+        styleSecondaryButton(btnPause);
+        styleSecondaryButton(btnReset);
+
+        HBox timerButtons = new HBox(8, btnStart, btnPause, btnReset);
+        timerButtons.setAlignment(Pos.CENTER);
+
+        VBox top = createCard(new VBox(8, lblTitle, lblGlobal, timerButtons));
 
         // 중앙: TableView
         table = new TableView<>(processes);
-        table.setFixedCellSize(24);
+        table.setFixedCellSize(28);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        table.setStyle("-fx-background-color:transparent;-fx-control-inner-background:#1E1E22;-fx-background-radius:14;-fx-border-radius:14;-fx-border-color:#3A3A42;");
 
         TableColumn<ProcessItem,String> colName  = new TableColumn<>("프로그램");
         colName.setCellValueFactory(new PropertyValueFactory<>("displayName"));
@@ -268,17 +279,24 @@ public class TimerApp extends Application {
         table.getColumns().setAll(colName, colTime, colUsage, colRemove);
 
         // 하단: 등록/통계 버튼
-        Button btnRegister = new Button("＋ 등록");
+        Button btnRegister = new Button("＋ 앱 등록");
         Button btnStats    = new Button("📊 통계/리포트");
-        HBox bottom = new HBox(5, btnRegister, btnStats);
-        bottom.setAlignment(Pos.CENTER_LEFT);
-        bottom.setPadding(new Insets(4));
+        stylePrimaryButton(btnRegister);
+        styleSecondaryButton(btnStats);
 
-        VBox root = new VBox(4, top, new Separator(), table, bottom);
-        root.setStyle("-fx-background-color:#222;");
-        root.setPadding(new Insets(8));
+        Label helper = new Label("활성 프로그램 자동선택 + 실행중 앱 검색으로 빠르게 등록");
+        helper.setStyle("-fx-font-size:12px;-fx-text-fill:#9A9AA2;");
 
-        Scene scene = new Scene(root, 480, 300);
+        HBox bottomButtons = new HBox(8, btnRegister, btnStats);
+        bottomButtons.setAlignment(Pos.CENTER_LEFT);
+
+        VBox bottom = createCard(new VBox(8, helper, bottomButtons));
+
+        VBox root = new VBox(10, top, createCard(table), bottom);
+        root.setStyle("-fx-background-color:linear-gradient(to bottom,#2B2B30,#1A1A1D);");
+        root.setPadding(new Insets(12));
+
+        Scene scene = new Scene(root, 560, 430);
         stage.setScene(scene);
         stage.setTitle("Focus Timer");
         stage.show();
@@ -288,9 +306,9 @@ public class TimerApp extends Application {
         timeline = new Timeline(new KeyFrame(Duration.seconds(1), e -> tick()));
         timeline.setCycleCount(Timeline.INDEFINITE);
 
-        btnStart   .setOnAction(e -> { startTimer(); lblGlobal.setTextFill(Color.RED); });
-        btnPause   .setOnAction(e -> { pauseTimer(); lblGlobal.setTextFill(Color.CYAN); });
-        btnReset   .setOnAction(e -> { resetAll(); lblGlobal.setTextFill(Color.CYAN); });
+        btnStart   .setOnAction(e -> { startTimer(); lblGlobal.setTextFill(Color.web("#7EE787")); });
+        btnPause   .setOnAction(e -> { pauseTimer(); lblGlobal.setTextFill(Color.WHITE); });
+        btnReset   .setOnAction(e -> { resetAll(); lblGlobal.setTextFill(Color.WHITE); });
         btnRegister.setOnAction(e -> registerProcess());
         btnStats   .setOnAction(e -> showStatsWindow());
     }
@@ -322,6 +340,7 @@ public class TimerApp extends Application {
         if (totalActive > 0) {
             processes.forEach(p -> p.updateUsage(totalActive));
         }
+        saveProcesses();
     }
 
     private String format(long s) {
@@ -359,44 +378,162 @@ public class TimerApp extends Application {
     }
 
     private void registerProcess() {
-        showAlert("등록", "등록할 창을 활성화한 뒤 확인하세요.");
-        new Thread(() -> {
-            try {
-                String fx = primaryStage.getTitle(), win;
-                HWND hwnd;
-                do {
-                    hwnd = User32.INSTANCE.GetForegroundWindow();
-                    char[] b = new char[512];
-                    User32.INSTANCE.GetWindowText(hwnd, b, 512);
-                    win = Native.toString(b);
-                    Thread.sleep(200);
-                } while (win.contains(fx) || win.isEmpty());
+        List<String> running = getRunningProcesses();
+        String activeExe = getForegroundProcessName();
 
-                IntByReference pidRef = new IntByReference();
-                User32.INSTANCE.GetWindowThreadProcessId(hwnd, pidRef);
-                HANDLE pr = Kernel32.INSTANCE.OpenProcess(
-                        Kernel32.PROCESS_QUERY_INFORMATION | Kernel32.PROCESS_VM_READ,
-                        false, pidRef.getValue()
-                );
-                char[] buf = new char[512];
-                IntByReference l = new IntByReference(buf.length);
-                Kernel32.INSTANCE.QueryFullProcessImageName(pr, 0, buf, l);
-                Kernel32.INSTANCE.CloseHandle(pr);
-                String full = new String(buf, 0, l.getValue());
-                String exe = full.substring(full.lastIndexOf('\\') + 1);
+        SortedSet<String> merged = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        merged.addAll(running);
+        merged.addAll(FRIENDLY_NAMES.keySet());
+        if (!activeExe.isBlank()) merged.add(activeExe);
 
-                Platform.runLater(() -> {
-                    if (processes.size() >= 6) {
-                        showAlert("실패", "최대 6개 등록 가능합니다.");
-                    } else if (processes.stream().anyMatch(p -> p.exeName.equalsIgnoreCase(exe))) {
-                        showAlert("실패", exe + " 이미 등록됨");
-                    } else {
-                        processes.add(new ProcessItem(exe));
-                        saveProcesses();
-                    }
-                });
-            } catch (Exception ignored) {}
-        }).start();
+        ObservableList<String> allOptions = FXCollections.observableArrayList(merged);
+        ObservableList<String> filteredOptions = FXCollections.observableArrayList(allOptions);
+
+        Dialog<String> dialog = new Dialog<>();
+        dialog.initOwner(primaryStage);
+        dialog.setTitle("앱 등록");
+        dialog.setHeaderText("활성 프로그램 또는 실행중 앱에서 선택");
+
+        ButtonType addType = new ButtonType("선택 등록", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(addType, ButtonType.CANCEL);
+
+        TextField tfSearch = new TextField();
+        tfSearch.setPromptText("앱 이름 검색 (예: chrome, vscode, excel)");
+
+        ListView<String> listView = new ListView<>(filteredOptions);
+        listView.setPrefHeight(280);
+        listView.setCellFactory(v -> new ListCell<>() {
+            @Override
+            protected void updateItem(String exe, boolean empty) {
+                super.updateItem(exe, empty);
+                if (empty || exe == null) {
+                    setText(null);
+                } else {
+                    setText(FRIENDLY_NAMES.getOrDefault(exe.toLowerCase(), exe) + "  (" + exe + ")");
+                }
+            }
+        });
+
+        Button btnActive = new Button("현재 활성 앱 선택: " + (activeExe.isEmpty() ? "감지 실패" : activeExe));
+        styleSecondaryButton(btnActive);
+        btnActive.setOnAction(e -> {
+            String exe = getForegroundProcessName();
+            if (!exe.isBlank()) {
+                if (!allOptions.contains(exe)) allOptions.add(0, exe);
+                applyFilter(tfSearch.getText(), allOptions, filteredOptions);
+                listView.getSelectionModel().select(exe);
+                listView.scrollTo(exe);
+            }
+        });
+
+        if (!activeExe.isBlank()) {
+            listView.getSelectionModel().select(activeExe);
+            listView.scrollTo(activeExe);
+        }
+
+        tfSearch.textProperty().addListener((obs, oldV, newV) ->
+                applyFilter(newV, allOptions, filteredOptions)
+        );
+
+        TextField tfManual = new TextField();
+        tfManual.setPromptText("직접 입력 (예: customapp.exe)");
+
+        Button btnManual = new Button("직접 입력 등록");
+        styleSecondaryButton(btnManual);
+        btnManual.setOnAction(e -> {
+            String manualExe = normalizeExeName(tfManual.getText());
+            if (!manualExe.isBlank()) {
+                dialog.setResult(manualExe);
+                dialog.close();
+            }
+        });
+
+        Label sourceHint = new Label(running.isEmpty()
+                ? "실행중 앱 목록을 가져오지 못해 추천 앱 목록을 표시합니다."
+                : "실행중 앱 + 추천 앱 목록에서 선택할 수 있습니다.");
+        sourceHint.setStyle("-fx-font-size:11px;-fx-text-fill:#9A9AA2;");
+
+        listView.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2) {
+                String selected = listView.getSelectionModel().getSelectedItem();
+                if (selected != null) {
+                    dialog.setResult(selected);
+                    dialog.close();
+                }
+            }
+        });
+
+        HBox manualBox = new HBox(8, tfManual, btnManual);
+        VBox content = new VBox(10, btnActive, tfSearch, listView, sourceHint, manualBox);
+        content.setPadding(new Insets(8));
+        dialog.getDialogPane().setContent(content);
+
+        dialog.setResultConverter(bt -> bt == addType ? listView.getSelectionModel().getSelectedItem() : null);
+
+        Optional<String> selected = dialog.showAndWait();
+        selected.map(this::normalizeExeName).ifPresent(this::addProcessByExe);
+    }
+
+    private void applyFilter(String query, List<String> source, ObservableList<String> target) {
+        String q = query == null ? "" : query.trim().toLowerCase();
+        target.setAll(source.stream()
+                .filter(exe -> exe.toLowerCase().contains(q)
+                        || FRIENDLY_NAMES.getOrDefault(exe.toLowerCase(), exe).toLowerCase().contains(q))
+                .collect(Collectors.toList()));
+    }
+
+    private String normalizeExeName(String exe) {
+        if (exe == null) return "";
+        String normalized = exe.trim();
+        if (normalized.isEmpty()) return "";
+        if (!normalized.toLowerCase().endsWith(".exe")) {
+            normalized += ".exe";
+        }
+        return normalized;
+    }
+
+    private void addProcessByExe(String exe) {
+        if (exe == null || exe.isBlank()) return;
+        if (processes.size() >= 6) {
+            showAlert("실패", "최대 6개 등록 가능합니다.");
+        } else if (processes.stream().anyMatch(p -> p.exeName.equalsIgnoreCase(exe))) {
+            showAlert("실패", exe + " 이미 등록됨");
+        } else {
+            processes.add(new ProcessItem(exe));
+            saveProcesses();
+        }
+    }
+
+    private List<String> getRunningProcesses() {
+        if (!IS_WINDOWS) return new ArrayList<>();
+        try {
+            Process pRun = new ProcessBuilder("tasklist", "/FO", "CSV", "/NH").start();
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(pRun.getInputStream()))) {
+                return br.lines()
+                        .map(line -> line.split("\",\"", 2)[0].replace("\"", "").trim())
+                        .filter(name -> !name.isBlank())
+                        .distinct()
+                        .sorted(String.CASE_INSENSITIVE_ORDER)
+                        .collect(Collectors.toList());
+            }
+        } catch (Exception ignored) {
+            return new ArrayList<>();
+        }
+    }
+
+    private VBox createCard(javafx.scene.Node node) {
+        VBox box = new VBox(node);
+        box.setPadding(new Insets(12));
+        box.setStyle("-fx-background-color:rgba(38,38,42,0.92);-fx-background-radius:16;-fx-border-color:rgba(255,255,255,0.08);-fx-border-radius:16;");
+        return box;
+    }
+
+    private void stylePrimaryButton(Button button) {
+        button.setStyle("-fx-background-color:#0A84FF;-fx-text-fill:white;-fx-font-weight:700;-fx-background-radius:12;-fx-padding:8 14;");
+    }
+
+    private void styleSecondaryButton(Button button) {
+        button.setStyle("-fx-background-color:#3A3A40;-fx-text-fill:#F5F5F7;-fx-font-weight:600;-fx-background-radius:12;-fx-padding:8 14;");
     }
 
     private void showStatsWindow() {
@@ -427,19 +564,43 @@ public class TimerApp extends Application {
     }
 
     private void loadProcesses() {
-        try (Reader r = new FileReader(DATA_FILE)) {
-            Type t = new TypeToken<List<String>>(){}.getType();
-            List<String> lst = new Gson().fromJson(r, t);
-            if (lst != null) lst.forEach(e -> processes.add(new ProcessItem(e)));
+        try {
+            String json = Files.readString(Path.of(DATA_FILE)).trim();
+            if (json.isEmpty()) return;
+
+            Gson gson = new Gson();
+            if (json.startsWith("[")) {
+                Type oldType = new TypeToken<List<String>>() {}.getType();
+                List<String> oldList = gson.fromJson(json, oldType);
+                if (oldList != null) {
+                    oldList.forEach(exe -> processes.add(new ProcessItem(exe)));
+                }
+                return;
+            }
+
+            Type stateType = new TypeToken<AppState>() {}.getType();
+            AppState state = gson.fromJson(json, stateType);
+            if (state == null) return;
+
+            globalSec = Math.max(0, state.globalSec);
+            if (state.processes != null) {
+                state.processes.forEach(saved -> {
+                    ProcessItem item = new ProcessItem(saved.exeName);
+                    item.setElapsedSec(saved.elapsedSec);
+                    processes.add(item);
+                });
+            }
         } catch (Exception ignored) {}
     }
 
     private void saveProcesses() {
         try (Writer w = new FileWriter(DATA_FILE)) {
-            List<String> lst = processes.stream()
-                    .map(p -> p.exeName)
+            AppState state = new AppState();
+            state.globalSec = globalSec;
+            state.processes = processes.stream()
+                    .map(p -> new SavedProcess(p.exeName, p.getElapsedSec()))
                     .collect(Collectors.toList());
-            new Gson().toJson(lst, w);
+            new Gson().toJson(state, w);
         } catch (Exception ignored) {}
     }
 
@@ -471,6 +632,9 @@ public class TimerApp extends Application {
         public void reset() {
             elapsedSec.set(0);
         }
+        public void setElapsedSec(long sec) {
+            elapsedSec.set(Math.max(0, sec));
+        }
         public void updateUsage(long totalActive) {
             double pct = totalActive > 0
                     ? 100.0 * elapsedSec.get() / totalActive : 0;
@@ -482,6 +646,23 @@ public class TimerApp extends Application {
         public StringProperty timeProperty()  { return timeStr; }
         public StringProperty usageProperty() { return usageStr; }
         public String getDisplayName()        { return displayName; }
+    }
+
+    private static class SavedProcess {
+        String exeName;
+        long elapsedSec;
+
+        SavedProcess() {}
+
+        SavedProcess(String exeName, long elapsedSec) {
+            this.exeName = exeName;
+            this.elapsedSec = elapsedSec;
+        }
+    }
+
+    private static class AppState {
+        long globalSec = 0;
+        List<SavedProcess> processes = new ArrayList<>();
     }
 
     public static void main(String[] args) {
