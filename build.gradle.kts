@@ -32,7 +32,7 @@ dependencies {
 }
 
 application {
-    mainClass.set("TimerApp")
+    mainClass.set("com.focustimer.TimerApp")
 }
 
 tasks.withType<JavaCompile> {
