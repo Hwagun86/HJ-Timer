@@ -23,7 +23,6 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       # 1) JavaFX SDK 다운로드 (러너에 없으니 직접 받아야 함)
-      - name: Download JavaFX SDK
         shell: pwsh
         run: |
           $ver = "17.0.15"
@@ -68,3 +67,4 @@ jobs:
         with:
           name: FocusTimer_portable
           path: FocusTimer_portable.zip
+
