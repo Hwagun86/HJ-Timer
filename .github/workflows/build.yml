@@ -38,7 +38,7 @@ jobs:
             --app-version 1.0 `
             --input $input `
             --main-jar "FocusTimer-all.jar" `
-            --main-class "TimerApp" `
+            --main-class "com.focustimer.TimerApp" `
             --dest $out `
             --module-path $input `
             --add-modules "javafx.controls,javafx.graphics,javafx.base"
@@ -53,3 +53,4 @@ jobs:
         with:
           name: FocusTimer_portable
           path: FocusTimer_portable.zip
+
