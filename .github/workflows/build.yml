@@ -40,8 +40,6 @@ jobs:
             --main-jar "FocusTimer-all.jar" `
             --main-class "com.focustimer.TimerApp" `
             --dest $out `
-            --module-path $input `
-            --add-modules "javafx.controls,javafx.graphics,javafx.base"
 
       - name: Zip portable output
         shell: pwsh
@@ -53,4 +51,5 @@ jobs:
         with:
           name: FocusTimer_portable
           path: FocusTimer_portable.zip
+
 
