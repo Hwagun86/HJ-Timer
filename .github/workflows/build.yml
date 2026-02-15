@@ -39,22 +39,22 @@ jobs:
           .\gradlew.bat clean fatJar prepJpackageInput
 
       # 3) 설치형 exe 대신: 포터블 app-image 생성 (WiX 불필요)
-      - name: Create portable app-image
-        shell: pwsh
-        run: |
-          $input = "$PWD\build\jpackage\input"
-          $out   = "$PWD\build\jpackage-out"
+- name: Create portable app-image
+  shell: pwsh
+  run: |
+    $input = "$PWD\build\jpackage\input"
+    $out   = "$PWD\build\jpackage-out"
 
-          & "$env:JAVA_HOME\bin\jpackage.exe" `
-            --type app-image `
-            --name FocusTimer `
-            --app-version 1.0 `
-            --input $input `
-            --main-jar "FocusTimer-all.jar" `
-            --main-class "TimerApp" `
-            --dest $out `
-            --module-path "$env:JAVAFX_SDK\lib;$input" `
-            --add-modules "javafx.controls,javafx.graphics,javafx.base"
+    & "$env:JAVA_HOME\bin\jpackage.exe" `
+      --type app-image `
+      --name FocusTimer `
+      --app-version 1.0 `
+      --input $input `
+      --main-jar "FocusTimer-all.jar" `
+      --main-class "TimerApp" `
+      --dest $out `
+      --module-path $input `
+      --add-modules "javafx.controls,javafx.graphics,javafx.base"
 
       # 4) 포터블 폴더를 zip으로 묶어서 업로드
       - name: Zip portable output
@@ -67,4 +67,5 @@ jobs:
         with:
           name: FocusTimer_portable
           path: FocusTimer_portable.zip
+
 
