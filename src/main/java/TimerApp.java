@@ -351,7 +351,10 @@ public class TimerApp extends Application {
         try {
             if (!SystemTray.isSupported()) return;
             SystemTray t = SystemTray.getSystemTray();
-            java.awt.Image img = Toolkit.getDefaultToolkit().createImage("icon.png");
+            // 기존 코드에서 icon.png를 로드하도록 되어 있었으나 파일이 존재하지
+            // 않아 트레이 아이콘이 표시되지 않았습니다. 실제 프로젝트에는
+            // path/to/icon.ico만 포함되어 있으므로 해당 파일을 사용합니다.
+            java.awt.Image img = Toolkit.getDefaultToolkit().createImage("path/to/icon.ico");
             trayIcon = new TrayIcon(img, "Focus Timer");
             trayIcon.setImageAutoSize(true);
             t.add(trayIcon);
